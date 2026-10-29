@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gursch – skuldtavla</title>
+<style>
+:root{--bg:#eef0e6;--surface:#fbfaf4;--ink:#1c2a22;--muted:#5d6b62;--line:#cfd5c4;--green:#1f5a3f;--red:#b3261e;--onGreen:#fff;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f2a21;--surface:#17382c;--ink:#f1ecdc;--muted:#a8b8ac;--line:#2c5242;--green:#6fcf97;--red:#ff8a80;--onGreen:#0f2a21}}
+:root[data-theme="dark"]{--bg:#0f2a21;--surface:#17382c;--ink:#f1ecdc;--muted:#a8b8ac;--line:#2c5242;--green:#6fcf97;--red:#ff8a80;--onGreen:#0f2a21}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 Georgia,"Times New Roman",serif}
+main{max-width:560px;margin:0 auto;padding:18px 16px 60px}
+h1{font-size:2.4rem;margin:.2em 0 0;letter-spacing:.02em}
+h2{font-size:1.15rem;margin:0 0 .5em}
+.sub{color:var(--muted);margin:0 0 1em}
+section{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;margin:14px 0}
+.row{display:flex;gap:8px;align-items:center;margin:8px 0}
+.row label{flex:1;font-weight:bold}
+input[type=text],input[type=number],input[type=tel]{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;width:100%}
+input.sum{width:110px;text-align:center}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--green);background:transparent;color:var(--green);padding:10px 14px}
+button.main{background:var(--green);color:var(--onGreen);font-weight:bold;width:100%;margin-top:6px}
+button.small{padding:6px 10px;font-size:.9rem}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,input:focus-visible{outline:3px solid var(--green);outline-offset:2px}
+.code{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.code b{font-size:2.6rem;letter-spacing:.18em}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}
+.chip{border-radius:20px;padding:8px 14px}
+.chip[aria-pressed="true"]{background:var(--green);color:var(--onGreen);font-weight:bold}
+.bal{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.bal:last-child{border:0}
+.plus{color:var(--green);font-weight:bold}.minus{color:var(--red);font-weight:bold}
+.hist{font-size:.95rem;padding:6px 0;border-bottom:1px solid var(--line)}
+.muted,.hint{color:var(--muted)}.hint{font-size:.9rem}
+.err{color:var(--red);min-height:1.2em}
+.hidden{display:none}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);max-width:420px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog button{display:block;width:100%;margin:8px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>Gursch</h1>
+
+<div id="start">
+<p class="sub">Skuldtavla för hela sällskapet. Alla i samma party ser samma ställning.</p>
+<section>
+<h2>Skapa party</h2>
+<p class="hint">Du får en kod med fyra siffror som de andra skriver in.</p>
+<button class="main" id="create">Skapa nytt party</button>
+</section>
+<section>
+<h2>Gå med i party</h2>
+<div class="row"><input type="tel" inputmode="numeric" maxlength="4" id="joinCode" placeholder="Kod, 4 siffror" aria-label="Partykod"><button id="join">Gå med</button></div>
+</section>
+<p class="err" id="startErr" role="alert"></p>
+</div>
+
+<div id="party" class="hidden">
+<section>
+<div class="code"><div><span class="hint">Partykod</span><br><b id="codeShow"></b></div><div><button class="small" id="copy">Kopiera</button> <button class="small" id="leave">Lämna</button></div></div>
+</section>
+
+<section>
+<h2>Ny runda</h2>
+<p class="hint">Välj vem som var högst och skriv in summan. Välj sedan vem som var lägst. Är flera lika tryck på alla, så frågar sidan vem som vann face off.</p>
+<strong>Högst</strong>
+<div class="chips" id="hiChips"></div>
+<div class="row"><label for="sum">Högsta summan</label><input type="number" inputmode="numeric" class="sum" id="sum" min="0" placeholder="summa"></div>
+<strong>Lägst</strong>
+<div class="chips" id="loChips"></div>
+<button class="main" id="calc">Räkna ut rundan</button>
+<p class="err" id="roundErr" role="alert"></p>
+<p class="hint">Knekt 11, dam 12, kung 13, ess 14. Sjuan räknas med det värde spelaren valde.</p>
+</section>
+
+<section>
+<h2>Ställning</h2>
+<div id="bal"></div>
+<div class="row"><button class="small" id="settle">Vem swishar vem?</button></div>
+<div id="settleOut"></div>
+</section>
+
+<section>
+<h2>Spelare</h2>
+<div id="names"></div>
+<div class="row"><button class="small" id="add">Lägg till spelare</button></div>
+<div class="row"><label for="rate">Kronor per poäng</label><input type="number" id="rate" class="sum" min="0" step="0.5"></div>
+<p class="hint">Betalningen är högsta summan × kronor per poäng.</p>
+</section>
+
+<section>
+<h2>Historik</h2>
+<div id="hist"></div>
+<div class="row"><button class="small" id="undo">Ångra senaste rundan</button><button class="small" id="reset">Nollställ skulder</button></div>
+</section>
+<p class="err" id="partyErr" role="alert"></p>
+</div>
+</main>
+<dialog id="dlg"><h2 id="dt"></h2><div id="db"></div></dialog>
+
+<script>
+var $=function(i){return document.getElementById(i)};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+var db=null,code=null,D=null,unsub=null,hiSel=[],loSel=[];
+
+function lsGet(){try{return localStorage.getItem("gursch_code")}catch(e){return null}}
+function lsSet(v){try{if(v)localStorage.setItem("gursch_code",v);else localStorage.removeItem("gursch_code")}catch(e){}}
+function ref(){return db.doc("parties/"+code)}
+function nm(id){var p=D.players.filter(function(x){return x.id===id})[0];return p?p.name:"okänd"}
+function fail(el,e){var m=e&&e.code==="permission_denied"?"Du får bara titta i det här partyt. Be ägaren ge dig Contributor-åtkomst till sidan.":"Det gick inte att spara. Försök igen.";$(el).textContent=m}
+
+async function mutate(fn,errEl){
+  try{var s=await ref().get();if(!s.exists){$(errEl).textContent="Partyt finns inte längre.";return false}
+    var d=JSON.parse(JSON.stringify(s.data()));fn(d);await ref().set(d);$(errEl).textContent="";return true}
+  catch(e){fail(errEl,e);return false}
+}
+
+function showStart(msg){
+  if(unsub){unsub();unsub=null}
+  code=null;D=null;lsSet(null);
+  $("party").classList.add("hidden");$("start").classList.remove("hidden");
+  $("startErr").textContent=msg||"";
+}
+function enter(c){
+  code=c;lsSet(c);hiSel=[];loSel=[];
+  $("codeShow").textContent=c;
+  $("start").classList.add("hidden");$("party").classList.remove("hidden");
+  if(unsub)unsub();
+  unsub=ref().onSnapshot(function(s){
+    if(!s.exists){showStart("Partyt finns inte längre.");return}
+    D=s.data();render();
+  },function(){showStart("Tappade kontakten med partyt.")});
+}
+
+async function createParty(){
+  $("startErr").textContent="";
+  try{
+    for(var k=0;k<12;k++){
+      var c=String(1000+Math.floor(Math.random()*9000));
+      var s=await db.doc("parties/"+c).get();
+      if(!s.exists){
+        await db.doc("parties/"+c).set({players:[{id:"p1",name:"Spelare 1"},{id:"p2",name:"Spelare 2"},{id:"p3",name:"Spelare 3"},{id:"p4",name:"Spelare 4"},{id:"p5",name:"Spelare 5"}],nextId:6,rate:1,rounds:[]});
+        enter(c);return}
+    }
+    $("startErr").textContent="Kunde inte hitta en ledig kod. Försök igen."
+  }catch(e){$("startErr").textContent=e&&e.code==="permission_denied"?"Du får inte skapa party med den här åtkomsten. Be ägaren ge dig Contributor-åtkomst.":"Det gick inte att skapa partyt."}
+}
+async function joinParty(){
+  var c=$("joinCode").value.trim();
+  if(!/^\d{4}$/.test(c)){$("startErr").textContent="Koden är fyra siffror.";return}
+  try{var s=await db.doc("parties/"+c).get();
+    if(!s.exists){$("startErr").textContent="Hittar inget party med koden "+c+".";return}
+    enter(c)}catch(e){$("startErr").textContent="Det gick inte att gå med just nu."}
+}
+
+function balances(){
+  var b={};D.players.forEach(function(p){b[p.id]=0});
+  D.rounds.forEach(function(r){b[r.payer]=(b[r.payer]||0)-r.amount;b[r.receiver]=(b[r.receiver]||0)+r.amount});
+  return b;
+}
+function chips(el,sel,toggle){
+  $(el).innerHTML=D.players.map(function(p){return '<button class="chip" data-id="'+p.id+'" aria-pressed="'+(sel.indexOf(p.id)>-1)+'">'+esc(p.name)+'</button>'}).join("");
+}
+function render(){
+  hiSel=hiSel.filter(function(i){return D.players.some(function(p){return p.id===i})});
+  loSel=loSel.filter(function(i){return D.players.some(function(p){return p.id===i})});
+  chips("hiChips",hiSel);chips("loChips",loSel);
+  var b=balances();
+  $("bal").innerHTML=D.players.map(function(p){
+    var v=Math.round(b[p.id]*100)/100,c=v>0?"plus":v<0?"minus":"muted";
+    return '<div class="bal"><span>'+esc(p.name)+'</span><span class="'+c+'">'+(v>0?"+":"")+v+' kr</span></div>'}).join("");
+  $("settleOut").innerHTML="";
+  if(!$("names").contains(document.activeElement)){
+    var used={};D.rounds.forEach(function(r){used[r.payer]=1;used[r.receiver]=1});
+    $("names").innerHTML=D.players.map(function(p){
+      return '<div class="row"><input type="text" value="'+esc(p.name)+'" data-id="'+p.id+'" aria-label="Namn"><button class="small" data-del="'+p.id+'"'+(used[p.id]||D.players.length<=2?' disabled title="Har rundor eller för få spelare"':'')+'>Ta bort</button></div>'}).join("");
+  }
+  if(document.activeElement!==$("rate"))$("rate").value=D.rate;
+  $("hist").innerHTML=D.rounds.length?D.rounds.slice().reverse().map(function(r,k){
+    return '<div class="hist">Runda '+(D.rounds.length-k)+': '+esc(nm(r.payer))+' ('+r.hiSum+') betalar '+r.amount+' kr till '+esc(nm(r.receiver))+(r.fo?' – face off':'')+'</div>'}).join(""):'<p class="muted">Inga rundor än.</p>';
+}
+function toggle(arr,id){var i=arr.indexOf(id);if(i>-1)arr.splice(i,1);else arr.push(id)}
+$("hiChips").onclick=function(e){var id=e.target.getAttribute("data-id");if(!id)return;toggle(hiSel,id);chips("hiChips",hiSel)};
+$("loChips").onclick=function(e){var id=e.target.getAttribute("data-id");if(!id)return;toggle(loSel,id);chips("loChips",loSel)};
+
+function ask(title,ids,cb){
+  $("dt").textContent=title;
+  $("db").innerHTML=ids.map(function(i){return '<button data-pick="'+i+'">'+esc(nm(i))+'</button>'}).join("");
+  var d=$("dlg");
+  $("db").onclick=function(e){var p=e.target.getAttribute&&e.target.getAttribute("data-pick");if(!p)return;d.close();cb(p)};
+  d.showModal();
+}
+$("calc").onclick=function(){
+  var er=$("roundErr");er.textContent="";
+  var sum=$("sum").value;
+  if(!hiSel.length){er.textContent="Välj vem som var högst.";return}
+  if(sum===""||+sum<0){er.textContent="Skriv in högsta summan.";return}
+  if(!loSel.length){er.textContent="Välj vem som var lägst.";return}
+  if(hiSel.some(function(i){return loSel.indexOf(i)>-1})){er.textContent="Samma spelare kan inte vara både högst och lägst.";return}
+  var hi=hiSel.slice(),lo=loSel.slice(),s=+sum;
+  function finish(payer,receiver,fo){
+    var amount=Math.round(s*D.rate*100)/100;
+    mutate(function(d){d.rounds.push({payer:payer,receiver:receiver,hiSum:s,amount:amount,fo:fo})},"roundErr").then(function(ok){
+      if(ok){hiSel=[];loSel=[];$("sum").value="";chips("hiChips",hiSel);chips("loChips",loSel)}});
+  }
+  function pickReceiver(payer,fo){
+    if(lo.length>1)ask("Face off om lägst. Vem vann?",lo,function(r){finish(payer,r,true)});
+    else finish(payer,lo[0],fo);
+  }
+  if(hi.length>1)ask("Face off om högst. Vem förlorade?",hi,function(p){pickReceiver(p,true)});
+  else pickReceiver(hi[0],false);
+};
+$("names").addEventListener("change",function(e){var id=e.target.getAttribute("data-id");if(!id)return;var v=e.target.value.trim()||"Spelare";mutate(function(d){d.players.forEach(function(p){if(p.id===id)p.name=v})},"partyErr")});
+$("names").addEventListener("click",function(e){var id=e.target.getAttribute("data-del");if(!id)return;mutate(function(d){d.players=d.players.filter(function(p){return p.id!==id})},"partyErr")});
+$("add").onclick=function(){mutate(function(d){d.players.push({id:"p"+d.nextId,name:"Spelare "+d.nextId});d.nextId++},"partyErr")};
+$("rate").onchange=function(){var v=parseFloat(this.value);mutate(function(d){d.rate=isNaN(v)?1:v},"partyErr")};
+$("undo").onclick=function(){mutate(function(d){d.rounds.pop()},"partyErr")};
+$("reset").onclick=function(){if(confirm("Nollställa alla rundor och skulder för hela partyt?"))mutate(function(d){d.rounds=[]},"partyErr")};
+$("leave").onclick=function(){showStart("")};
+$("copy").onclick=function(){try{navigator.clipboard.writeText(code);$("copy").textContent="Kopierad"}catch(e){}setTimeout(function(){$("copy").textContent="Kopiera"},1500)};
+$("settle").onclick=function(){
+  var b=balances(),d=[],c=[];
+  D.players.forEach(function(p){var x=Math.round(b[p.id]*100)/100;if(x<0)d.push([p.id,-x]);else if(x>0)c.push([p.id,x])});
+  d.sort(function(a,b){return b[1]-a[1]});c.sort(function(a,b){return b[1]-a[1]});
+  var i=0,j=0,out=[];
+  while(i<d.length&&j<c.length){var m=Math.min(d[i][1],c[j][1]);
+    out.push(esc(nm(d[i][0]))+' swishar '+Math.round(m*100)/100+' kr till '+esc(nm(c[j][0])));
+    d[i][1]-=m;c[j][1]-=m;if(d[i][1]<0.005)i++;if(c[j][1]<0.005)j++}
+  $("settleOut").innerHTML=out.length?out.map(function(t){return '<div class="hist">'+t+'</div>'}).join(""):'<p class="muted">Ingen är skyldig något just nu.</p>';
+};
+$("create").onclick=createParty;$("join").onclick=joinParty;
+$("joinCode").addEventListener("keydown",function(e){if(e.key==="Enter")joinParty()});
+
+$("create").disabled=true;$("join").disabled=true;
+$("startErr").textContent="Ansluter …";
+claude.use("db").then(function(x){
+  db=x;
+  if(!db){$("startErr").textContent="Delade party kräver att du är inloggad på Claude och har öppnat sidan via länken. Logga in och ladda om.";return}
+  $("startErr").textContent="";$("create").disabled=false;$("join").disabled=false;
+  var c=lsGet();
+  if(c)db.doc("parties/"+c).get().then(function(s){if(s.exists)enter(c);else lsSet(null)}).catch(function(){});
+});
+</script>
+</body>
+</html>
